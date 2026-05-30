@@ -24,7 +24,17 @@ export class AudioEngine {
         // Manual progress tracking for large files isn't perfectly supported without ReadableStream,
         // but since we only have 3 files, file-level progress is sufficient.
         const arrayBuffer = await response.arrayBuffer();
-        const audioBuffer = await this.context.decodeAudioData(arrayBuffer);
+        const audioBuffer = await new Promise((resolve, reject) => {
+          const decodeResult = this.context.decodeAudioData(
+            arrayBuffer,
+            (buffer) => resolve(buffer),
+            (err) => reject(err)
+          );
+          // If it returns a promise (modern browsers), handle it
+          if (decodeResult) {
+            decodeResult.then(resolve).catch(reject);
+          }
+        });
         
         this.buffers[key] = audioBuffer;
         loaded++;

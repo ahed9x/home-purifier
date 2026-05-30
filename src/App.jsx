@@ -5,7 +5,7 @@ import { AudioEngine } from './audioEngine';
 import { SyncManager } from './audioSync';
 
 export default function App() {
-  const [appState, setAppState] = useState('loading'); // loading, menu, host, client
+  const [appState, setAppState] = useState('welcome'); // welcome, loading, menu, host, client
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [roomId, setRoomId] = useState('');
   const [joinId, setJoinId] = useState('');
@@ -15,21 +15,24 @@ export default function App() {
   const engineRef = useRef(null);
   const syncRef = useRef(null);
 
+  // We initialize only on user click to bypass browser Audio autoplay policies
+  const initApp = async () => {
+    setAppState('loading');
+    setError('');
+    try {
+      engineRef.current = new AudioEngine();
+      await engineRef.current.loadAll((progress) => {
+        setLoadingProgress(progress);
+      });
+      setAppState('menu');
+    } catch (err) {
+      console.error("Failed to load audio:", err);
+      setError(`Failed to load audio files: ${err.message}. Please check your connection and reload.`);
+      setAppState('welcome');
+    }
+  };
+
   useEffect(() => {
-    // Initialize audio engine and load files
-    const init = async () => {
-      try {
-        engineRef.current = new AudioEngine();
-        await engineRef.current.loadAll((progress) => {
-          setLoadingProgress(progress);
-        });
-        setAppState('menu');
-      } catch (err) {
-        console.error("Failed to load audio:", err);
-        setError("Failed to load audio files. Please check your connection and reload.");
-      }
-    };
-    init();
 
     return () => {
       if (syncRef.current) syncRef.current.disconnect();
@@ -85,6 +88,25 @@ export default function App() {
   };
 
   // UI Components
+  const WelcomeScreen = () => (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+      className="flex flex-col items-center justify-center p-8 glass-card rounded-3xl text-center max-w-md w-full"
+    >
+      <Music className="w-16 h-16 text-primary-500 mb-6" />
+      <h2 className="text-3xl font-bold mb-4">Welcome to QuranSync</h2>
+      <p className="text-gray-400 mb-8">
+        Experience hyper-synchronized recitation of Surah Al-Nas, Al-Falaq, and Al-Baqarah across all your devices.
+      </p>
+      <button 
+        onClick={initApp}
+        className="w-full py-4 rounded-xl bg-primary-600 hover:bg-primary-500 transition-colors font-semibold text-lg shadow-lg shadow-primary-500/30"
+      >
+        Enter App
+      </button>
+    </motion.div>
+  );
+
   const LoadingScreen = () => (
     <motion.div 
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -262,6 +284,7 @@ export default function App() {
         )}
 
         <AnimatePresence mode="wait">
+          {appState === 'welcome' && <WelcomeScreen key="welcome" />}
           {appState === 'loading' && <LoadingScreen key="loading" />}
           {appState === 'menu' && <MenuScreen key="menu" />}
           {appState === 'host' && <HostScreen key="host" />}

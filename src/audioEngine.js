@@ -4,9 +4,9 @@ export class AudioEngine {
     this.buffers = {};
     
     this.urls = {
-      nas: 'https://server8.mp3quran.net/afs/114.mp3',
-      falaq: 'https://server8.mp3quran.net/afs/113.mp3',
-      baqarah: 'https://server8.mp3quran.net/afs/002.mp3',
+      nas: 'https://server11.mp3quran.net/yasser/114.mp3',
+      falaq: 'https://server11.mp3quran.net/yasser/113.mp3',
+      baqarah: 'https://server11.mp3quran.net/yasser/002.mp3',
     };
     
     this.sources = [];

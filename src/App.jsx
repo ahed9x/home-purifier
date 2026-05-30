@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Square, Users, Radio, Loader2, Music, CheckCircle2 } from 'lucide-react';
+import { Play, Square, Users, Radio, Loader2, Music, CheckCircle2, Copy, Link as LinkIcon } from 'lucide-react';
 import { AudioEngine } from './audioEngine';
 import { SyncManager } from './audioSync';
 
@@ -24,11 +24,31 @@ export default function App() {
       await engineRef.current.loadAll((progress) => {
         setLoadingProgress(progress);
       });
-      setAppState('menu');
+      
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomParam = urlParams.get('room');
+      if (roomParam) {
+        setJoinId(roomParam);
+        joinRoomById(roomParam);
+      } else {
+        setAppState('menu');
+      }
     } catch (err) {
       console.error("Failed to load audio:", err);
       setError(`Failed to load audio files: ${err.message}. Please check your connection and reload.`);
       setAppState('welcome');
+    }
+  };
+
+  const joinRoomById = async (id) => {
+    setAppState('client');
+    try {
+      syncRef.current = new SyncManager(false, handleMessage);
+      await syncRef.current.initialize(); 
+      await syncRef.current.joinRoom(id);
+    } catch (err) {
+      setError("Failed to join session. Please check the link.");
+      setAppState('menu');
     }
   };
 
@@ -44,6 +64,12 @@ export default function App() {
     if (data.type === 'play') {
       setIsPlaying(true);
       engineRef.current.scheduleSequence(data.startTime, offset);
+    } else if (data.type === 'sync') {
+      // Periodic sync from host. If we dropped or paused, resync.
+      if (!isPlaying || engineRef.current.context.state === 'suspended') {
+         setIsPlaying(true);
+         engineRef.current.scheduleSequence(data.startTime, offset);
+      }
     } else if (data.type === 'stop') {
       setIsPlaying(false);
       engineRef.current.stop();
@@ -65,16 +91,7 @@ export default function App() {
   const joinSession = async (e) => {
     e.preventDefault();
     if (!joinId.trim()) return;
-    
-    setAppState('client');
-    try {
-      syncRef.current = new SyncManager(false, handleMessage);
-      await syncRef.current.initialize(); // Get client ID first
-      await syncRef.current.joinRoom(joinId);
-    } catch (err) {
-      setError("Failed to join session. Please check the code.");
-      setAppState('menu');
-    }
+    joinRoomById(joinId);
   };
 
   const startPlayback = () => {
@@ -85,6 +102,12 @@ export default function App() {
       engineRef.current.resume();
       syncRef.current.broadcastPlay(2000); // 2 seconds delay to ensure sync
     }
+  };
+
+  const copyLink = () => {
+    const link = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+    navigator.clipboard.writeText(link);
+    // Just a quick visual feedback could be added here, but the button text change works well.
   };
 
   // UI Components
@@ -182,10 +205,14 @@ export default function App() {
       
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h2 className="text-sm uppercase tracking-widest text-primary-400 font-bold mb-1">Room Code</h2>
-          <div className="text-3xl font-mono tracking-wider font-light bg-black/30 px-4 py-2 rounded-lg select-all">
-            {roomId || 'Generating...'}
-          </div>
+          <h2 className="text-sm uppercase tracking-widest text-primary-400 font-bold mb-1">Invite Listeners</h2>
+          {roomId ? (
+            <button onClick={copyLink} className="flex items-center gap-2 text-xl font-medium bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg transition-colors border border-white/5">
+              <LinkIcon className="w-5 h-5" /> Copy Share Link
+            </button>
+          ) : (
+            <div className="text-lg font-mono tracking-wider font-light text-gray-500">Generating...</div>
+          )}
         </div>
         <div className="flex flex-col items-center">
           <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse mb-2"></div>

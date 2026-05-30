@@ -88,7 +88,7 @@ export class SyncManager {
         // Use median to avoid outliers from GC pauses or network spikes
         const sorted = [...this.clockOffsets].sort((a, b) => a - b);
         this.currentOffset = sorted[Math.floor(sorted.length / 2)];
-      } else if (data.type === 'play' || data.type === 'stop') {
+      } else if (data.type === 'play' || data.type === 'stop' || data.type === 'sync') {
         if (this.onMessageReceived) {
           this.onMessageReceived(data, this.currentOffset);
         }
@@ -98,41 +98,49 @@ export class SyncManager {
 
   startPinging() {
     if (this.pingInterval) clearInterval(this.pingInterval);
-    // Ping every 500ms to establish accurate offset quickly
+    // Ping every 1000ms to keep offset accurate
     this.pingInterval = setInterval(() => {
       if (this.connection && this.connection.open) {
         this.connection.send({ type: 'ping', cTime: Date.now() });
       }
-    }, 500);
+    }, 1000);
   }
 
   broadcastPlay(delayMs = 2000) {
     if (!this.isHost) return;
     
     // Schedule playback slightly in the future so all clients have time to receive the message
-    const startTime = Date.now() + delayMs;
+    this.currentStartTime = Date.now() + delayMs;
     
-    const playMsg = { type: 'play', startTime };
-    this.connections.forEach(conn => {
-      if (conn.open) {
-        conn.send(playMsg);
-      }
-    });
+    const playMsg = { type: 'play', startTime: this.currentStartTime };
+    this.broadcastMessage(playMsg);
     
-    // Also trigger on the host locally (offset is 0 since host is the source of truth)
     if (this.onMessageReceived) {
       this.onMessageReceived(playMsg, 0);
     }
+
+    // Periodic Sync Heartbeat to catch up dropped clients or asleep devices
+    if (this.syncHeartbeat) clearInterval(this.syncHeartbeat);
+    this.syncHeartbeat = setInterval(() => {
+      this.broadcastMessage({ type: 'sync', startTime: this.currentStartTime });
+    }, 10000); // Every 10 seconds
+  }
+
+  broadcastMessage(msg) {
+    this.connections.forEach(conn => {
+      if (conn.open) {
+        conn.send(msg);
+      }
+    });
   }
 
   broadcastStop() {
     if (!this.isHost) return;
+    this.currentStartTime = null;
+    if (this.syncHeartbeat) clearInterval(this.syncHeartbeat);
+
     const stopMsg = { type: 'stop' };
-    this.connections.forEach(conn => {
-      if (conn.open) {
-        conn.send(stopMsg);
-      }
-    });
+    this.broadcastMessage(stopMsg);
     if (this.onMessageReceived) {
       this.onMessageReceived(stopMsg, 0);
     }
@@ -140,6 +148,7 @@ export class SyncManager {
 
   disconnect() {
     if (this.pingInterval) clearInterval(this.pingInterval);
+    if (this.syncHeartbeat) clearInterval(this.syncHeartbeat);
     if (this.connection) this.connection.close();
     this.connections.forEach(conn => conn.close());
     if (this.peer) this.peer.destroy();

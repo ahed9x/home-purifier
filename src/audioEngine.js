@@ -21,7 +21,33 @@ export class AudioEngine {
     this.baqarahSourceNode = this.context.createMediaElementSource(this.baqarahAudio);
     this.baqarahSourceNode.connect(this.context.destination);
     
+    // Background Audio Hack: To keep the Web Audio API running when the phone screen locks,
+    // we must play a silent HTMLAudioElement continuously.
+    this.silenceAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+    this.silenceAudio.loop = true;
+    
     this.syncLoopId = null;
+
+    // Set up Lock Screen / Background Media Controls
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'QuranSync Live Session',
+        artist: 'Yasser Al-Dosari',
+        album: 'Al-Nas, Al-Falaq, Al-Baqarah',
+        artwork: [
+          { src: 'https://cdn-icons-png.flaticon.com/512/3596/3596091.png', sizes: '512x512', type: 'image/png' }
+        ]
+      });
+
+      // Prevent default lock screen pause behavior from ruining the sync
+      navigator.mediaSession.setActionHandler('pause', () => {
+        // We ignore the pause to force continuous sync, or we could emit a stop command.
+        // For a hyper-synced radio, it's better to force it to keep playing.
+      });
+      navigator.mediaSession.setActionHandler('play', () => {
+        this.resume();
+      });
+    }
   }
 
   async loadAll(onProgress) {
@@ -75,6 +101,9 @@ export class AudioEngine {
   scheduleSequence(startTimeMs, clockOffsetMs) {
     this.stop();
     this.resume();
+    
+    // Play the silent audio to ensure background execution privileges
+    this.silenceAudio.play().catch(e => console.error("Silence hack blocked:", e));
 
     const nasBuffer = this.buffers['nas'];
     const falaqBuffer = this.buffers['falaq'];
@@ -173,6 +202,7 @@ export class AudioEngine {
       this.syncLoopId = null;
     }
     
+    this.silenceAudio.pause();
     this.baqarahAudio.pause();
     this.baqarahAudio.currentTime = 0;
   }

@@ -4,9 +4,9 @@ export class AudioEngine {
     this.buffers = {};
     // Using high quality Mishary Alafasy recitations from QuranicAudio
     this.urls = {
-      nas: 'https://download.quranicaudio.com/quran/mishaari_raashid_al_3afaasee/114.mp3',
-      falaq: 'https://download.quranicaudio.com/quran/mishaari_raashid_al_3afaasee/113.mp3',
-      baqarah: 'https://download.quranicaudio.com/quran/mishaari_raashid_al_3afaasee/002.mp3',
+      nas: 'https://server8.mp3quran.net/afs/114.mp3',
+      falaq: 'https://server8.mp3quran.net/afs/113.mp3',
+      baqarah: 'https://server8.mp3quran.net/afs/002.mp3',
     };
     this.sources = [];
   }
@@ -21,12 +21,14 @@ export class AudioEngine {
         const response = await fetch(this.urls[key]);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
-        // Manual progress tracking for large files isn't perfectly supported without ReadableStream,
-        // but since we only have 3 files, file-level progress is sufficient.
         const arrayBuffer = await response.arrayBuffer();
+        
+        // Slice the buffer (workaround for some Safari versions where fetch detaches the buffer)
+        const bufferCopy = arrayBuffer.slice(0);
+        
         const audioBuffer = await new Promise((resolve, reject) => {
           const decodeResult = this.context.decodeAudioData(
-            arrayBuffer,
+            bufferCopy,
             (buffer) => resolve(buffer),
             (err) => reject(err)
           );

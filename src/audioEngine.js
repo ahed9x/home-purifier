@@ -92,6 +92,14 @@ export class AudioEngine {
     });
   }
 
+  getTotalDuration() {
+    let total = 0;
+    if (this.buffers['nas']) total += this.buffers['nas'].duration * 3;
+    if (this.buffers['falaq']) total += this.buffers['falaq'].duration * 3;
+    if (this.baqarahAudio && !isNaN(this.baqarahAudio.duration)) total += this.baqarahAudio.duration;
+    return total;
+  }
+
   resume() {
     if (this.context.state === 'suspended') {
       this.context.resume();

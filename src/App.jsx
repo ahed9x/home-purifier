@@ -10,6 +10,7 @@ export default function App() {
   const [roomId, setRoomId] = useState('');
   const [joinId, setJoinId] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackData, setPlaybackData] = useState(null); // { startTime, offset, totalDuration }
   const [error, setError] = useState('');
   
   const engineRef = useRef(null);
@@ -63,15 +64,18 @@ export default function App() {
   const handleMessage = (data, offset) => {
     if (data.type === 'play') {
       setIsPlaying(true);
+      setPlaybackData({ startTime: data.startTime, offset: offset, totalDuration: engineRef.current.getTotalDuration() });
       engineRef.current.scheduleSequence(data.startTime, offset);
     } else if (data.type === 'sync') {
       // Periodic sync from host. If we dropped or paused, resync.
       if (!isPlaying || engineRef.current.context.state === 'suspended') {
          setIsPlaying(true);
+         setPlaybackData({ startTime: data.startTime, offset: offset, totalDuration: engineRef.current.getTotalDuration() });
          engineRef.current.scheduleSequence(data.startTime, offset);
       }
     } else if (data.type === 'stop') {
       setIsPlaying(false);
+      setPlaybackData(null);
       engineRef.current.stop();
     }
   };
@@ -110,7 +114,46 @@ export default function App() {
     // Just a quick visual feedback could be added here, but the button text change works well.
   };
 
+  const formatTime = (seconds) => {
+    if (isNaN(seconds) || seconds < 0) seconds = 0;
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
   // UI Components
+  const PlaybackTimer = () => {
+    const [timeLeft, setTimeLeft] = useState(0);
+    
+    useEffect(() => {
+      if (!playbackData || !playbackData.totalDuration) return;
+      
+      const interval = setInterval(() => {
+        const localNow = Date.now();
+        const estimatedHostNow = localNow + playbackData.offset;
+        const elapsedMs = estimatedHostNow - playbackData.startTime;
+        
+        let remaining = playbackData.totalDuration - (elapsedMs / 1000);
+        if (remaining < 0) remaining = 0;
+        setTimeLeft(remaining);
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }, [playbackData]);
+
+    if (!playbackData || timeLeft <= 0) return null;
+
+    return (
+      <div className="mt-6 p-4 rounded-2xl bg-black/20 border border-white/5 backdrop-blur-sm">
+        <div className="text-xs text-gray-400 uppercase tracking-widest font-bold mb-2">Time Remaining</div>
+        <div className="text-3xl font-mono text-primary-400 font-light tracking-wider">
+          {formatTime(timeLeft)}
+        </div>
+      </div>
+    );
+  };
   const WelcomeScreen = () => (
     <motion.div 
       initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
@@ -229,6 +272,7 @@ export default function App() {
           <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-4 h-4 text-primary-400"/> Surah Al-Falaq (3x)</li>
           <li className="flex items-center gap-3 text-sm"><CheckCircle2 className="w-4 h-4 text-primary-400"/> Surah Al-Baqarah</li>
         </ul>
+        {isPlaying && <PlaybackTimer />}
       </div>
 
       <button 
@@ -287,6 +331,8 @@ export default function App() {
            </button>
          </div>
       )}
+      
+      {isPlaying && <PlaybackTimer />}
     </motion.div>
   );
 
